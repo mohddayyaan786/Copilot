@@ -11,7 +11,7 @@ import java.util.Date;
 public class JwtUtil {
     private final String jwtSecret = "mySecretKeymySecretKeymySecretKeymySecretKey"; // 32+ chars
     private final long jwtExpirationMs = 86400000; // 1 day
-    private final Key key = Keys.hmacShaKeyFor(jwtSecret.getBytes());
+    final Key key = Keys.hmacShaKeyFor(jwtSecret.getBytes());
 
     public String generateToken(String username) {
         return Jwts.builder()
