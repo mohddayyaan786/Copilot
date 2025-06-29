@@ -1,6 +1,8 @@
 package org.copilot.controller;
 
 import org.copilot.config.auth.JwtUtil;
+import org.junit.jupiter.api.AfterEach;
+import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.mockito.InjectMocks;
 import org.mockito.Mock;
@@ -8,17 +10,15 @@ import org.mockito.MockitoAnnotations;
 import org.springframework.security.core.userdetails.User;
 import org.springframework.security.core.userdetails.UserDetails;
 import org.springframework.security.core.userdetails.UserDetailsService;
-import org.springframework.boot.test.context.SpringBootTest;
-import org.springframework.test.context.ActiveProfiles;
 
+import java.lang.reflect.Field;
+import java.util.Collections;
 import java.util.HashMap;
 import java.util.Map;
 
 import static org.junit.jupiter.api.Assertions.*;
 import static org.mockito.Mockito.*;
 
-@SpringBootTest
-@ActiveProfiles("test")
 class AuthControllerTest {
     @Mock
     private JwtUtil jwtUtil;
@@ -27,30 +27,76 @@ class AuthControllerTest {
     @InjectMocks
     private AuthController authController;
 
-    public AuthControllerTest() {
-        MockitoAnnotations.openMocks(this);
+    private AutoCloseable mocks;
+
+    @BeforeEach
+    void setUp() throws Exception {
+        mocks = MockitoAnnotations.openMocks(this);
+        authController = new AuthController();
+        // Use reflection to inject mocks into private fields
+        Field jwtUtilField = AuthController.class.getDeclaredField("jwtUtil");
+        jwtUtilField.setAccessible(true);
+        jwtUtilField.set(authController, jwtUtil);
+        Field udsField = AuthController.class.getDeclaredField("userDetailsService");
+        udsField.setAccessible(true);
+        udsField.set(authController, userDetailsService);
+    }
+
+    @AfterEach
+    void tearDown() throws Exception {
+        if (mocks != null) mocks.close();
     }
 
     @Test
-    void testLoginSuccess() {
+    void login_shouldReturnToken_whenCredentialsAreValid() {
+        String username = "user";
+        String password = "password";
+        UserDetails userDetails = new User(username, password, Collections.emptyList());
+        when(userDetailsService.loadUserByUsername(username)).thenReturn(userDetails);
+        when(jwtUtil.generateToken(username)).thenReturn("mocked-token");
         Map<String, String> request = new HashMap<>();
-        request.put("username", "user");
-        request.put("password", "password");
-        UserDetails userDetails = User.withUsername("user").password("password").roles("USER").build();
-        when(userDetailsService.loadUserByUsername("user")).thenReturn(userDetails);
-        when(jwtUtil.generateToken("user")).thenReturn("dummy-token");
+        request.put("username", username);
+        request.put("password", password);
         Map<String, String> response = authController.login(request);
-        assertEquals("dummy-token", response.get("token"));
+        assertNotNull(response.get("token"));
+        assertEquals("mocked-token", response.get("token"));
     }
 
     @Test
-    void testLoginInvalidCredentials() {
+    void login_shouldThrowException_whenUserNotFound() {
+        String username = "nouser";
+        String password = "password";
+        when(userDetailsService.loadUserByUsername(username)).thenThrow(new RuntimeException("User not found"));
         Map<String, String> request = new HashMap<>();
-        request.put("username", "user");
-        request.put("password", "wrong");
-        UserDetails userDetails = User.withUsername("user").password("password").roles("USER").build();
-        when(userDetailsService.loadUserByUsername("user")).thenReturn(userDetails);
+        request.put("username", username);
+        request.put("password", password);
         assertThrows(RuntimeException.class, () -> authController.login(request));
     }
-}
 
+    @Test
+    void login_shouldThrowException_whenPasswordIsIncorrect() {
+        String username = "user";
+        String password = "wrongpassword";
+        UserDetails userDetails = new User(username, "password", Collections.emptyList());
+        when(userDetailsService.loadUserByUsername(username)).thenReturn(userDetails);
+        Map<String, String> request = new HashMap<>();
+        request.put("username", username);
+        request.put("password", password);
+        assertThrows(RuntimeException.class, () -> authController.login(request));
+    }
+
+    @Test
+    void login_shouldThrowException_whenUsernameOrPasswordIsMissing() {
+        Map<String, String> request = new HashMap<>();
+        request.put("username", "user");
+        assertThrows(RuntimeException.class, () -> authController.login(request));
+        request.clear();
+        request.put("password", "password");
+        assertThrows(RuntimeException.class, () -> authController.login(request));
+    }
+
+    @Test
+    void login_shouldThrowException_whenRequestMapIsNull() {
+        assertThrows(RuntimeException.class, () -> authController.login(null));
+    }
+    }

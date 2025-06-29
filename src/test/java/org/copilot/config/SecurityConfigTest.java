@@ -1,38 +1,65 @@
 package org.copilot.config;
 
-import org.copilot.config.auth.JwtAuthFilter;
-import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
-import org.mockito.InjectMocks;
-import org.mockito.Mock;
-import org.mockito.junit.jupiter.MockitoExtension;
+import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.boot.test.autoconfigure.web.servlet.AutoConfigureMockMvc;
+import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.security.core.userdetails.UserDetailsService;
-import org.springframework.security.provisioning.InMemoryUserDetailsManager;
-import org.springframework.security.config.annotation.web.builders.HttpSecurity;
+import org.springframework.test.web.servlet.MockMvc;
 
 import static org.junit.jupiter.api.Assertions.*;
-import static org.mockito.Mockito.*;
-import org.junit.jupiter.api.extension.ExtendWith;
 
-@ExtendWith(MockitoExtension.class)
+
+@SpringBootTest
+@AutoConfigureMockMvc
 class SecurityConfigTest {
-    @Mock
-    private JwtAuthFilter jwtAuthFilter;
-
-    @InjectMocks
+    @Autowired
+    private MockMvc mockMvc;
+    @Autowired
     private SecurityConfig securityConfig;
 
     @Test
-    void testUserDetailsService() {
+    void userDetailsService_shouldReturnInMemoryUserDetailsManager() {
         UserDetailsService uds = securityConfig.userDetailsService();
         assertNotNull(uds);
-        assertInstanceOf(InMemoryUserDetailsManager.class, uds);
+        assertNotNull(uds.loadUserByUsername("user"));
     }
 
     @Test
-    void testFilterChain() throws Exception {
-        HttpSecurity http = mock(HttpSecurity.class);
-        assertDoesNotThrow(() -> securityConfig.filterChain(http, jwtAuthFilter));
+    void unauthenticatedRequestToProtectedEndpoint_shouldReturnUnauthorizedOrNotFoundOrForbidden() throws Exception {
+        mockMvc.perform(org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get("/some-protected-endpoint"))
+                .andExpect(result -> {
+                    int status = result.getResponse().getStatus();
+                    assertTrue(status == 401 || status == 403 || status == 404,
+                        "Should be Unauthorized (401), Forbidden (403), or NotFound (404)");
+                });
+    }
+
+    @Test
+    void unauthenticatedRequestToLogin_shouldReturnMethodNotAllowed() throws Exception {
+        mockMvc.perform(org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get("/auth/login"))
+                .andExpect(result -> {
+                    int status = result.getResponse().getStatus();
+                    assertEquals(405, status, "Should be Method Not Allowed (405) since /auth/login only allows POST");
+                });
+    }
+
+    @Test
+    @org.springframework.security.test.context.support.WithMockUser(username = "user", roles = {"USER"})
+    void authenticatedRequestToProtectedEndpoint_shouldBeAllowedOrNotFound() throws Exception {
+        mockMvc.perform(org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get("/some-protected-endpoint"))
+                .andExpect(result -> {
+                    int status = result.getResponse().getStatus();
+                    assertTrue(status == 200 || status == 404, "Should be allowed (200) or NotFound (404), but not Unauthorized");
+                });
+    }
+
+    @Test
+    void h2ConsoleShouldBeAccessibleWithoutAuth() throws Exception {
+        mockMvc.perform(org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get("/h2-console/"))
+                .andExpect(result -> {
+                    int status = result.getResponse().getStatus();
+                    assertTrue(status == 200 || status == 404, "Should be accessible or NotFound, but not Unauthorized");
+                });
     }
 }
-
