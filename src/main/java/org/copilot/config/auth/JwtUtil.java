@@ -9,9 +9,9 @@ import java.util.Date;
 
 @Component
 public class JwtUtil {
-    private final String jwtSecret = "mySecretKeymySecretKeymySecretKeymySecretKey"; // 32+ chars
+    private final String jwtSecretKey = "mySecretKeymySecretKeymySecretKeymySecretKey"; // 32+ chars
     private final long jwtExpirationMs = 86400000; // 1 day
-    final Key key = Keys.hmacShaKeyFor(jwtSecret.getBytes());
+    final Key key = Keys.hmacShaKeyFor(jwtSecretKey.getBytes());
 
     public String generateToken(String username) {
         return Jwts.builder()
