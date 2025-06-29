@@ -99,4 +99,4 @@ class AuthControllerTest {
     void login_shouldThrowException_whenRequestMapIsNull() {
         assertThrows(RuntimeException.class, () -> authController.login(null));
     }
-}
+    }
